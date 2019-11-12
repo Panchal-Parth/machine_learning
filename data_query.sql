@@ -4,7 +4,7 @@ SET @begin = (SELECT TOP 1 UTCDateTime FROM CEVAC_WATT_WAP_FLOOR_OLDEST ORDER BY
 DECLARE @results TABLE(UTCDateTime DATETIME, floor_int INT, temperature FLOAT, power FLOAT, occupancy INT, table_int INT);
 DECLARE @with_occupancy TABLE(UTCDateTime DATETIME, floor_int INT, temperature FLOAT, power FLOAT, occupancy INT);
 DECLARE @without_occupancy TABLE(UTCDateTime DATETIME, floor_int INT, temperature FLOAT, power FLOAT, occupancy INT);
-DECLARE @dataset TABLE(UTCDateTime DATETIME, hour INT, weekday INT, floor_int INT, temperature FLOAT, power FLOAT, occupancy INT);
+DECLARE @dataset TABLE(UTCDateTime DATETIME, hour INT, weekday INT, floor_int INT, temperature FLOAT, occupancy INT, power FLOAT);
 
 DECLARE @new_power_sums TABLE (PointSliceID INT, Alias NVARCHAR(MAX), UTCDateTime DATETIME, ActualValue FLOAT, floor_int INT);
 DECLARE @temp_all TABLE (PointSliceID INT, Alias NVARCHAR(MAX), UTCDateTime DATETIME, ActualValue FLOAT, floor_int INT);
@@ -88,15 +88,13 @@ WITH without_occupany AS (
     INNER JOIN @with_occupancy AS wo ON wo.UTCDateTime = ps.UTCDateTime
 ) INSERT INTO @without_occupancy SELECT * FROM without_occupany;
 
-
-INSERT INTO @dataset
-SELECT o.UTCDateTime, DATEPART(HOUR, o.UTCDateTime) AS hour, DATEPART(WEEKDAY, o.UTCDateTime) AS weekday, o.floor_int, o.temperature, o.power, o.occupancy
+WITH fifth AS (
+    SELECT UTCDateTime, (power / 5) AS d
+    FROM @without_occupancy
+) INSERT INTO @dataset
+SELECT o.UTCDateTime, DATEPART(hour, o.UTCDateTime) AS 'hour', DATEPART(weekday, o.UTCDateTime) AS weekday, o.floor_int, o.temperature, o.occupancy, o.power + fifth.d AS power
 FROM @with_occupancy AS o
-
-INSERT INTO @dataset
-SELECT o.UTCDateTime, DATEPART(HOUR, o.UTCDateTime) AS hour, DATEPART(WEEKDAY, o.UTCDateTime) AS weekday, o.floor_int, o.temperature, o.power, o.occupancy
-FROM @without_occupancy AS o
-
+INNER JOIN fifth ON fifth.UTCDateTime = o.UTCDateTime;
 
 IF OBJECT_ID('RESULTS_TEMPORARY') IS NOT NULL DROP TABLE RESULTS_TEMPORARY;
 SELECT *
