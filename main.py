@@ -86,34 +86,33 @@ def build_z(d):
                     terms.append(result)
                     yield [*result,x]
 
-    n = int(d)
-    X_indicies = list(range(feature_count))
-    output = sum([list(map(list,combinations(X_indicies,i))) for i in range(len(X_indicies) + 1)],[])
-    o = deepcopy(output)
+    def makeCounter_rec(base):
+        def incDigit(num, pos):
+            new = num[:]
+            if(num[pos] == base - 1):
+                new[pos] = 0
+                if(pos < len(num) - 1):
+                    return incDigit(new, pos + 1)
+            else:
+                new[pos] = new[pos] + 1
+            return new
+
+        def inc(num):
+            return incDigit(num, 0)
+        return inc
+
     terms = []
-    for item in o:
-        item = sorted(item)
-        if len(item) > n or item in terms or len(item) <= 0:
-            output.remove(item)
-        else:
-            terms.append(item)
-    z = output
-
-
-    #  _X = []
-    #  for _d in range(d + 1):
-        #  _X.append(_d)
-    #  terms = []
-    #  for f in range(feature_count):
-        #  l = sorted([0,f])
-        #  z.append(l)
-        #  terms.append(l)
-    #  z_g = recur(d)
-    #  for xl in z_g:
-        #  xl = sorted(xl)
-        #  if xl not in terms:
-            #  terms.append(xl)
-            #  z.append(xl)
+    base = int(feature_count + 1)
+    inc = makeCounter_rec(base)
+    combo = [0] * int(d)
+    z.append(combo)
+    terms.append(combo)
+    for i in range(base ** len(combo)):
+        combo = inc(combo)
+        z_ = sorted(deepcopy(combo))
+        if z_ not in terms:
+            terms.append(z_)
+            z.append(z_)
 
 """
 name   : zx_swap
