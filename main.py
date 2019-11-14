@@ -22,12 +22,15 @@ train_data = []
 dor_data = []
 bod_data = []
 typ_data = []
-W = [159,-3.79,211,-0.0281,-0.0686,-93.7]
+W = []
+feature_count = 0
+feature_labels = []
 temp_W = W
 init_J = 0
 alpha = 10
 init_alpha = alpha
-z = [[0], [1], [2], [1,2], [1,1], [2,2]]
+z = []
+degree = 2
 iterations = 0
 iter_data = []
 
@@ -37,8 +40,6 @@ def main():
     print('Training, please wait...')
     improve_weights()
     print_results()
-    ### display and save plots
-    save_scatter3d('scatterplot3d.png')
     save_J_plot('j_plot_full.png', iter_data)
 
     ### prompt user to enter new data
@@ -65,11 +66,39 @@ def improve_weights():
             temp_W[i] = float(apply_alpha(i))
         print('.', end="", flush=True)
         W = deepcopy(temp_W)
-        alpha = float(0.95 * alpha) ### scale alpha by 0.995 to slowly approach best weights
+        alpha = float(0.90 * alpha) ### scale alpha by 0.995 to slowly approach best weights
         last_J = current_J
         current_J = J(W, train_data)
         J_change = current_J - last_J
         iter_data.append(current_J) ### store current J value for plotting later
+
+
+def build_z(d):
+    global z, feature_count
+    def recur(n):
+        if n <= 0:
+            yield []
+        else:
+            for result in recur(n - 1):
+                for i in range(d + 1):
+                    x = _X[i]
+                    terms.append(result)
+                    yield [*result,x]
+
+    _X = []
+    for _d in range(d + 1):
+        _X.append(_d)
+    terms = []
+    for f in range(feature_count):
+        l = sorted([0,f])
+        z.append(l)
+        terms.append(l)
+    z_g = recur(d)
+    for xl in z_g:
+        xl = sorted(xl)
+        if xl not in terms:
+            terms.append(xl)
+            z.append(xl)
 
 """
 name   : zx_swap
@@ -85,6 +114,7 @@ def zx_swap(index, X):
     total = float(1)
     for i in z[index]:
         total *= X[i]
+
     return total
 
 """
@@ -98,8 +128,11 @@ def apply_alpha(index):
     derivative = float(0)
     w = W[index]
     for p in train_data:
-        X = (1, p[0],p[1])
-        typ = p[2]
+        x_list = [1]
+        for f in p:
+            x_list.append(f)
+        X = tuple(x_list)
+        typ = p[-1]
         diff = h(W,X) - typ
         derivative += (diff * zx_swap(index, X))
     return w - (alpha * (derivative / float(len(train_data))))
@@ -122,8 +155,10 @@ returns: cost value of weights W
 def J(W, data_set):
     total_sq_error = float(0)
     for p in data_set:
-        X = (1, p[0],p[1])
-        total_sq_error += float(sq_err(X, p[2]))
+        X = [1]
+        for f in p[:-1]:
+            X.append(f)
+        total_sq_error += float(sq_err(X, p[-1]))
     return float(total_sq_error / (2 * len(test_data)))
 
 """
@@ -131,7 +166,7 @@ name   : h
 desc   : the hypothesis function. The relation between inputs (X) and weights (W).
 returns: predicted typ
 """
-def h(W, X):
+def h_old(W, X):
     y = float(W[0])
     y += W[1] * X[1]
     y += W[2] * X[2]
@@ -140,18 +175,37 @@ def h(W, X):
     y += W[5] * (X[2] ** 2)
     return y
 
+def h(W, X):
+    global degree
+    y = 0.0
+    for i in range(degree + 1):
+        y += W[i] * zx_swap(i,X)
+    return y
+
+
 """
 name: init
 desc: initializes weights, alpha, and calculates first J(W)
 """
 def init():
-    global W, temp_W, init_J, test_data, alpha, all_data
+    global W, temp_W, init_J, test_data, alpha, all_data, degree, z, feature_count
 
+    default = 2
+    degree = input("What degree polynomial would you like to model? (default: " + str(default) + "): ")
+    if degree == "":
+        degree = int(default)
+    else:
+        degree = int(degree)
+        def_filename = "label_new_data_set.csv"
     if(len(all_data) == 0):
-        filename = input("Enter filename (default: test_data.csv): ")
+        filename = input("Enter filename (default: " + def_filename + "): ")
         if filename == "":
-            filename = "test_data.csv"
+            filename = def_filename
         read_data(filename)
+    build_z(degree)
+    W = [0.0] * len(z)
+    temp_W = W
+
     divide_data()
     alpha = 1
     init_J = J(W,test_data)
@@ -161,7 +215,7 @@ name: read_data
 desc: parses a tab-seperated file into several lists
 """
 def read_data(filename):
-    global all_data, total, bod_data, dor_data, typ_data
+    global all_data, total, bod_data, dor_data, typ_data, feature_count, feature_labels
     all_data, bod_data, dor_data, typ_data = [],[],[],[]
     with open(filename,"r") as file:
         for line in file:
@@ -169,25 +223,13 @@ def read_data(filename):
             if len(d) == 1:
                 total = int(d[0])
                 continue
-            bod = int(d[0])
-            dor = int(d[1])
-            typ = float(d[2])
-            all_data.append((bod,dor,typ))
-            bod_data.append(bod)
-            dor_data.append(dor)
-            typ_data.append(typ)
-            #  if typ == 0:
-                #  tiger0.data.append((bod,dor,typ))
-                #  tiger0.bodies.append(bod)
-                #  tiger0.dorsals.append(dor)
-            #  elif typ == 1:
-                #  tiger1.data.append((bod,dor,typ))
-                #  tiger1.bodies.append(bod)
-                #  tiger1.dorsals.append(dor)
-            #  else:
-                #  print('Incorrect type. Ignoring...')
-                #  continue
-
+            try:
+                d = [float(i) for i in d]
+            except:
+                feature_labels = d
+                feature_count = len(d) - 1
+                continue
+            all_data.append(tuple(d))
 
 """
 name: divide_data
@@ -208,26 +250,23 @@ name    : all_data_stats
 desc    : calulates minimums, maximums, and means of features in all_data
 """
 def all_data_stats():
-    global all_data, all_data_mins, all_data_maxes, all_data_means
-    x1_total,x2_total,x1_max,x2_max,x1_min,x2_min = 0,0,0,0,0,0
+    global all_data, all_data_mins, all_data_maxes, all_data_means, feature_count
+    x_i_total,x_i_maxes,x_i_mins = [0.0] * feature_count,[0.0] * feature_count,[0.0] * feature_count
+    x_i_means = [0.0] * feature_count
     for p in all_data:
-        x1_total += p[0]
-        x2_total += p[1]
-        if(p[0] > x1_max):
-            x1_max = p[0]
-        if(p[1] > x2_max):
-            x2_max = p[1]
-        if(p[0] < x1_min):
-            x1_min = p[0]
-        if(p[1] < x2_min):
-            x2_min = p[1]
+        for i in range(len(p) - 1):
+            x_i_total[i] += p[i]
+            if p[i] > x_i_maxes[i]:
+                x_i_maxes[i] = p[i]
+            if p[i] < x_i_mins[i]:
+                x_i_mins[i] = p[i]
 
-    x1_mean = float(x1_total / len(all_data))
-    x2_mean = float(x2_total / len(all_data))
+    for f in range(feature_count):
+        x_i_means[i] = float(x_i_total[i] / len(all_data))
     
-    all_data_maxes = (x1_max,x2_max)
-    all_data_mins = (x1_min,x2_min)
-    all_data_means = (x1_mean,x2_mean)
+    all_data_maxes = tuple(x_i_maxes)
+    all_data_mins = tuple(x_i_mins)
+    all_data_means = tuple(x_i_means)
 
 
 """
@@ -250,19 +289,19 @@ desc    : scales features in a point according to mean normalization
 returns : tuple (bod,dors,typ)
 """
 def scale_point(p,maxes,mins,means):
-    x1 = p[0]
-    x2 = p[1]
-    x1_max = maxes[0]
-    x2_max = maxes[1]
-    x1_min = mins[0]
-    x2_min = mins[1]
-    x1_mean = means[0]
-    x2_mean = means[1]
+    y = p[-1]
+    new_point_list = []
 
-    ##  scale the data
-    x1 = (x1 - x1_mean) / (x1_max - x1_min)
-    x2 = (x2 - x2_mean) / (x2_max - x2_min)
-    return (x1,x2,p[2])
+    for i in range(len(maxes)):
+        x_i = p[i]
+        x_i_max = maxes[i]
+        x_i_min = mins[i]
+        x_i_mean = means[i]
+        x_i = (x_i - x_i_mean) / (x_i_max - x_i_min)
+        new_point_list.append(x_i)
+    new_point_list.append(y)
+
+    return tuple(new_point_list)
 
 
 """
@@ -284,19 +323,19 @@ desc    : converts a scaled point to its original magnitude
 returns : tuple (bod,dors,typ)
 """
 def un_scale_point(s_p, maxes, mins, means):
-    sx1 = s_p[0]
-    sx2 = s_p[1]
-    x1_max = maxes[0]
-    x2_max = maxes[1]
-    x1_min = mins[0]
-    x2_min = mins[1]
-    x1_mean = means[0]
-    x2_mean = means[1]
+    y = p[:-1]
+    new_point_list = []
 
-    ##  scale the data
-    x1 = (sx1 * (x1_max - x1_min)) + x1_mean
-    x2 = (sx2 * (x2_max - x2_min)) + x2_mean
-    return (x1,x2,s_p[2])
+    for i in range(len(maxes)):
+        x_i = p[i]
+        x_i_max = maxes[i]
+        x_i_min = mins[i]
+        x_i_mean = means[i]
+        x_i = (x_i * (x_i_max - x_i_min)) + x_i_mean
+        new_point_list.append(x_i)
+    new_point_list.append(y)
+
+    return tuple(new_point_list)
 
 
 """
@@ -305,40 +344,29 @@ desc   : asks the user for values
 returns: tuple of dorsal and body length
 """
 def prompt_user():
-    global all_data_maxes,all_data_mins,all_data_means
+    global all_data_maxes,all_data_mins,all_data_means,feature_count
     error = "Please enter the correct value."
-    while True:
-        try:
-            bod = int(get_date())
-        except:
-            print(error)
-        else:
-            break
-    while True:
-        try:
-            dor = float(input("Building occupancy (int) : "))
-        except :
-            print(error)
-        else:
-            break
-    if(bod == 0 and dor == 0):
-        return (0,0)
-    p = (bod,dor,-1)
+
+    feats = [0] * int(feature_count)
+    for i in range(feature_count):
+        while True:
+            try:
+                l = feature_labels[i]
+                prompt = str(l) + ": "
+                f = float(input(prompt))
+                
+            except:
+                print(error)
+                break
+            else:
+                break
+        feats.append(f)
+
+    #  if(feats == [0.0] * feature_count):
+        #  return tuple([0.0] * feature_count)
+    feats.append(-1)
+    p = tuple(feats)
     return scale_point(p, all_data_maxes,all_data_mins,all_data_means)
-
-#  def accuracy(tp, tn, fp, fn):
-    #  return (tp + tn) / (float(tp + tn + fp + fn))
-
-#  def precision(tp, fp):
-    #  return tp / (float(tp + fp))
-
-#  def recall(tp, fn):
-    #  return tp / (float(tp + fn))
-
-#  def f1(prec, rec):
-    #  denom = (1 / float(prec)) + (1 / float(rec))
-    #  return 2 * (1 / denom)
-
 
 """
 name: print_results
@@ -347,16 +375,7 @@ desc: prints relevant information after training, such as number of iterations, 
 """
 def print_results():
     global iterations, alpha, init_alpha, W, test_data, init_J
-    #  c = confusion_matrix()
-    #  tn = c[0]
-    #  fp = c[1]
-    #  fn = c[2]
-    #  tp = c[3]
-    #  acc = accuracy(tp, tn, fp, fn)
-    #  prec = precision(tp, fp)
-    #  rec = recall(tp, fn)
-    #  f = f1(prec, rec)
-    
+   
     print("\nRESULTS:\n----------")
     print("Training iterations   :", iterations)
     print("Initial alpha value   :", init_alpha)
@@ -364,15 +383,6 @@ def print_results():
     print("Initial J(W)(test)    : {:.2e}".format(init_J))
     print("Final J(W)(test)      : {:.2e}".format(J(W,test_data)))
     print("Hypothesis model      :", equation_string(W))
-    #  print('\nCONFUSION MATRIX:')
-    #  print('----------')
-    #  print("TN:{:3d}".format(tn), " | FP:{:3d}".format(fp))
-    #  print("FN:{:3d}".format(fn), " | TP:{:3d}".format(tp))
-    #  print('\naccuracy              :', round(acc,4))
-    #  print('precision             :', round(prec,4))
-    #  print('recall                :', round(rec,4))
-    #  print('f1                    :', round(f,4))
-
 
 """
 name   : equation_string
@@ -380,59 +390,18 @@ desc   : formats the weights into a human-readable string
 returns: the mathematical definition of the hypothesis function (h(X)) as a string
 """
 def equation_string(W):
+    global z
     out = "h(X) = "
-    out += "({:.2e}".format(W[0]) + ") + " + "({:.2e})(x1) + ".format(W[1])
-    out += "({:.2e})(x2) + ".format(W[2]) + "({:.2e})(x1)(x2) + ".format(W[3])
-    out += "({:.2e})(x1 ^ 2) + ".format(W[4]) + "({:.2e})(x2 ^ 2)".format(W[5])
-    return out
+    w_i = 0
+    for x_i_list in z:
+        out += "({:.2e})".format(W[w_i])
+        for x_i in x_i_list:
+            if x_i > 0:
+                out += "(x" + str(x_i) + ")"
+        out += " + "
+        w_i += 1
 
-
-#  """
-#  name    : condidence
-#  desc    : converts the scalar pred_type to a percentage
-          #  ex: pred_type of 0.25 is a confidence rate of 50% for tigerFish0
-          #  because 0.5 is halfway between 0 and 0.5 (cutoff for classification)
-#  returns : percentage string
-#  """
-#  def confidence(pred_typ):
-    #  if(pred_typ > 0.5):
-        #  rel_per = (pred_typ - 0.5) / 0.5
-    #  else:
-        #  rel_per = 1 - (pred_typ / 0.5)
-
-    #  per = rel_per * 100
-    #  if(per >= 100):
-        #  per = 99.99
-    #  string = str(round(per,2)) + '%'
-
-    #  return string
-
-#  """
-#  name    : confusion_matric
-#  desc    : calculates true and false negative/positives
-#  """
-#  def confusion_matrix():
-    #  tn,fp,fn,tp = 0,0,0,0
-    #  for p in test_data:
-        #  X = (1, p[0], p[1])
-        #  pred_typ = (h(W,X))
-        #  if pred_typ < 0.5:
-            #  pred_typ = 0
-        #  else:
-            #  pred_typ = 1
-
-        #  pred_actual_tuple = (pred_typ, p[2])
-        #  if pred_actual_tuple[0] == 0 and pred_actual_tuple[1] == 0:
-            #  tp += 1
-        #  elif pred_actual_tuple[0] == 0 and pred_actual_tuple[1] == 1:
-            #  fn += 1
-        #  elif pred_actual_tuple[0] == 1 and pred_actual_tuple[1] == 0:
-            #  fp += 1
-        #  elif pred_actual_tuple[0] == 1 and pred_actual_tuple[1] == 1:
-            #  tn += 1
-        #  else:
-            #  print(pred_actual_tuple)
-    #  return tn,fp,fn,tp
+    return out[:-3]
 
 
 """
@@ -441,7 +410,10 @@ desc: driver script for calculating and printing predicted types
 """
 def loop(W,p):
     global tiger0,tiger1
-    X = (1, p[0], p[1])
+    x_list = [1]
+    for f in p:
+        x_list.append(f)
+    X = tuple(x_list)
     pred_typ = (h(W,X))
     print("Predicted Usage        :", pred_typ)
 
