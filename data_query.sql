@@ -31,7 +31,7 @@ WITH new_power_sums AS (
     -- Only include floor sums (negative PSIDs), Media Lights and HVAC (for 'Building' floor)
     -----------------------------------------------------------------------------------------
     WHERE x.PointSliceID IN (-7, -6,-5, -4, -3, -2, 23303, 21461)
-    AND UTCDateTime > @begin
+    AND UTCDateTime >= @begin
 ) INSERT INTO @new_power_sums SELECT * FROM new_power_sums;
 -------------------------------
 -- All temperature data (with floor as int)
@@ -48,7 +48,7 @@ WITH temp_all AS (
     END AS floor_int
     FROM CEVAC_WATT_TEMP_HIST AS h
     INNER JOIN CEVAC_WATT_TEMP_XREF AS x ON x.PointSliceID = h.PointSliceID
-    AND UTCDateTime > @begin
+    AND UTCDateTime >= @begin
 ) INSERT INTO @temp_all SELECT * FROM temp_all;
 -------------------------------
 -- Average temperature for the entire building
@@ -75,26 +75,38 @@ WITH with_occupancy AS (
     INNER JOIN @new_temp AS t ON t.floor_int = ps.floor_int AND t.UTCDateTime = ps.UTCDateTime
     INNER JOIN CEVAC_WATT_WAP_FLOOR_HIST AS wf ON CAST(wf.floor AS INT) = ps.floor_int AND wf.UTCDateTime = ps.UTCDateTime
 ) INSERT INTO @with_occupancy SELECT * FROM with_occupancy;
+IF OBJECT_ID('WITH_OCCUPANCY') IS NOT NULL DROP TABLE WITH_OCCUPANCY;
+SELECT * INTO WITH_OCCUPANCY FROM @with_occupancy;
 -------------------------------
 -- INNER JOIN power and temp without occupancy data (for 'floor 5')
 -------------------------------
 WITH without_occupany AS (
-    SELECT ps.UTCDateTime, ps.floor_int, t.temperature, ps.ActualValue AS 'power', 0 AS 'occupancy'
+    SELECT ps.UTCDateTime, 5 AS 'floor_int', t.temperature, ps.ActualValue AS 'power', 0 AS 'occupancy'
     FROM @new_power_sums AS ps
     INNER JOIN @all_avg_temp AS t ON t.floor_int = ps.floor_int AND t.UTCDateTime = ps.UTCDateTime
     -------------------------------
     -- Only include UTCDateTime that corresponds with datetimes with occupancy (prevent bias)
     -------------------------------
     INNER JOIN @with_occupancy AS wo ON wo.UTCDateTime = ps.UTCDateTime
+	WHERE ps.floor_int = 5
+--	GROUP BY ps.UTCDateTime, t.temperature
 ) INSERT INTO @without_occupancy SELECT * FROM without_occupany;
 
-WITH fifth AS (
-    SELECT UTCDateTime, (power / 5) AS d
-    FROM @without_occupancy
-) INSERT INTO @dataset
-SELECT o.UTCDateTime, DATEPART(hour, o.UTCDateTime) AS 'hour', DATEPART(weekday, o.UTCDateTime) AS weekday, o.floor_int, o.temperature, o.occupancy, o.power + fifth.d AS power
+DECLARE @building_agg TABLE(UTCDateTime DATETIME, distribute FLOAT);
+------------------------------------
+-- Distribute building-wide power use among other floors.
+-- Insert
+------------------------------------
+WITH building_agg AS (
+	SELECT UTCDateTime, (SUM(power) / 4) AS distribute
+	FROM @without_occupancy
+	GROUP BY UTCDateTime
+) INSERT INTO @building_agg SELECT * FROM building_agg
+
+INSERT INTO @dataset
+SELECT DISTINCT o.UTCDateTime, DATEPART(hour, o.UTCDateTime) AS 'hour', DATEPART(weekday, o.UTCDateTime) AS weekday, o.floor_int, o.temperature, o.occupancy, (o.power + wo.distribute) AS power
 FROM @with_occupancy AS o
-INNER JOIN fifth ON fifth.UTCDateTime = o.UTCDateTime;
+INNER JOIN @building_agg AS wo ON wo.UTCDateTime = o.UTCDateTime;
 
 IF OBJECT_ID('RESULTS_TEMPORARY') IS NOT NULL DROP TABLE RESULTS_TEMPORARY;
 SELECT *
