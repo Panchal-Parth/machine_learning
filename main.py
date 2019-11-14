@@ -13,6 +13,7 @@ from copy import deepcopy
 from matplotlib import pyplot as plt
 import numpy as np
 from mpl_toolkits.mplot3d import axes3d, Axes3D
+from itertools import combinations
 all_data = []
 all_data_mins = []
 all_data_maxes = []
@@ -66,7 +67,7 @@ def improve_weights():
             temp_W[i] = float(apply_alpha(i))
         print('.', end="", flush=True)
         W = deepcopy(temp_W)
-        alpha = float(0.90 * alpha) ### scale alpha by 0.995 to slowly approach best weights
+        alpha = float(0.995 * alpha) ### scale alpha by 0.995 to slowly approach best weights
         last_J = current_J
         current_J = J(W, train_data)
         J_change = current_J - last_J
@@ -85,20 +86,34 @@ def build_z(d):
                     terms.append(result)
                     yield [*result,x]
 
-    _X = []
-    for _d in range(d + 1):
-        _X.append(_d)
+    n = int(d)
+    X_indicies = list(range(feature_count))
+    output = sum([list(map(list,combinations(X_indicies,i))) for i in range(len(X_indicies) + 1)],[])
+    o = deepcopy(output)
     terms = []
-    for f in range(feature_count):
-        l = sorted([0,f])
-        z.append(l)
-        terms.append(l)
-    z_g = recur(d)
-    for xl in z_g:
-        xl = sorted(xl)
-        if xl not in terms:
-            terms.append(xl)
-            z.append(xl)
+    for item in o:
+        item = sorted(item)
+        if len(item) > n or item in terms or len(item) <= 0:
+            output.remove(item)
+        else:
+            terms.append(item)
+    z = output
+
+
+    #  _X = []
+    #  for _d in range(d + 1):
+        #  _X.append(_d)
+    #  terms = []
+    #  for f in range(feature_count):
+        #  l = sorted([0,f])
+        #  z.append(l)
+        #  terms.append(l)
+    #  z_g = recur(d)
+    #  for xl in z_g:
+        #  xl = sorted(xl)
+        #  if xl not in terms:
+            #  terms.append(xl)
+            #  z.append(xl)
 
 """
 name   : zx_swap
@@ -191,12 +206,12 @@ def init():
     global W, temp_W, init_J, test_data, alpha, all_data, degree, z, feature_count
 
     default = 2
+    def_filename = "label_new_data_set.csv"
     degree = input("What degree polynomial would you like to model? (default: " + str(default) + "): ")
     if degree == "":
         degree = int(default)
     else:
         degree = int(degree)
-        def_filename = "label_new_data_set.csv"
     if(len(all_data) == 0):
         filename = input("Enter filename (default: " + def_filename + "): ")
         if filename == "":
@@ -205,6 +220,8 @@ def init():
     build_z(degree)
     W = [0.0] * len(z)
     temp_W = W
+    print(z)
+    input()
 
     divide_data()
     alpha = 1
