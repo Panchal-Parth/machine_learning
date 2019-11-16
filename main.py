@@ -28,8 +28,9 @@ feature_count = 0
 feature_labels = []
 temp_W = W
 init_J = 0
-alpha = 10
+alpha = 1000
 init_alpha = alpha
+alpha_decay = 0.9
 z = []
 degree = 2
 iterations = 0
@@ -38,7 +39,7 @@ iter_data = []
 def main():
     global test_data, train_data, W, iterations, iter_data
     init()
-    print('Training, please wait...')
+    print('Training, please wait',end="",flush=True)
     improve_weights()
     print_results()
     save_J_plot('j_plot_full.png', iter_data)
@@ -46,7 +47,7 @@ def main():
     ### prompt user to enter new data
     while True:
         p = prompt_user()
-        if p == (0,0):
+        if p == 0:
             break
         loop(W,p)
 
@@ -55,11 +56,11 @@ name: improve_weights
 desc: the primary training driver function
 """
 def improve_weights():
-    global W, alpha, train_data, temp_W,iterations,iter_data
+    global W, alpha, train_data, temp_W,iterations, iter_data, alpha_decay
     init_alpha = alpha
     J_change = -1
     last_J = J(W, train_data) + 1
-    current_J = J(W, train_data)
+    current_J = J(W, test_data)
     iter_data.append(current_J) ### include for zero iterations
     while J_change < 0:
         iterations += 1
@@ -67,9 +68,9 @@ def improve_weights():
             temp_W[i] = float(apply_alpha(i))
         print('.', end="", flush=True)
         W = deepcopy(temp_W)
-        alpha = float(0.995 * alpha) ### scale alpha by 0.995 to slowly approach best weights
+        alpha = float(alpha_decay * alpha) ### scale alpha by alpha_decay to slowly approach best weights
         last_J = current_J
-        current_J = J(W, train_data)
+        current_J = J(W, test_data)
         J_change = current_J - last_J
         iter_data.append(current_J) ### store current J value for plotting later
 
@@ -217,10 +218,8 @@ def init():
             filename = def_filename
         read_data(filename)
     build_z(degree)
-    W = [0.0] * len(z)
+    W = [10.0] * len(z)
     temp_W = W
-    print(z)
-    input()
 
     divide_data()
     alpha = 1
@@ -363,11 +362,11 @@ def prompt_user():
     global all_data_maxes,all_data_mins,all_data_means,feature_count
     error = "Please enter the correct value."
 
-    feats = [0] * int(feature_count)
+    feats = []
     for i in range(feature_count):
         while True:
             try:
-                l = feature_labels[i]
+                l = "{:22s}".format(feature_labels[i])
                 prompt = str(l) + ": "
                 f = float(input(prompt))
                 
@@ -378,8 +377,8 @@ def prompt_user():
                 break
         feats.append(f)
 
-    #  if(feats == [0.0] * feature_count):
-        #  return tuple([0.0] * feature_count)
+    if(feats == [0] * int(feature_count)):
+        return 0
     feats.append(-1)
     p = tuple(feats)
     return scale_point(p, all_data_maxes,all_data_mins,all_data_means)
@@ -425,13 +424,16 @@ name: loop
 desc: driver script for calculating and printing predicted types
 """
 def loop(W,p):
-    global tiger0,tiger1
     x_list = [1]
     for f in p:
         x_list.append(f)
     X = tuple(x_list)
     pred_typ = (h(W,X))
-    print("Predicted Usage        :", pred_typ)
+    out = "{:22s}: ".format('Predicted Usage')
+    out += str(pred_typ)
+    for i in range(23):
+        out += "#"
+    print(out)
 
 """
 name: save_scatter3d
